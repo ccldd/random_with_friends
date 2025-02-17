@@ -1,0 +1,12 @@
+{{ template "layout.html" . }}
+
+{{ define "content" }}
+<form action="/create" method="post">
+    <button>Create Room</button>
+</form>
+
+<form action="/join" method="post">
+    <input name="roomId" type="text" placeholder="room id"/>
+    <button>Join Room</button>
+</form>
+{{ end }}
