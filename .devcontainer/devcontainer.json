@@ -1,0 +1,57 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/go
+{
+	"name": "Go",
+	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+	"image": "mcr.microsoft.com/devcontainers/go:1",
+	"features": {
+		"ghcr.io/devcontainers/features/go:1": {},
+		"ghcr.io/dusansimic/devcontainer-features/templ:0": {},
+		"ghcr.io/guiyomh/features/golangci-lint": {}
+	},
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	// "forwardPorts": [],
+
+	// Use 'postCreateCommand' to run commands after the container is created.
+	"postCreateCommand": {
+		"install deps": "go install",
+		"wgo": "go install github.com/bokwoon95/wgo@latest"
+	},
+
+	// Configure tool-specific properties.
+	"customizations": {
+        "vscode": {
+            "settings": {
+				"files.autoSave": "afterDelay",
+                "editor.formatOnSave": true,
+                "editor.formatOnSaveMode": "modifications",
+				"workbench.editor.enablePreview": false,
+				"go.formatTool": "goimports",
+				"files.exclude": {
+					"**/.git": true,
+					"**/.svn": true,
+					"**/.hg": true,
+					"**/CVS": true,
+					"**/.DS_Store": true,
+					"**/Thumbs.db": true,
+					"**/*templ.go": true
+				},
+				"search.exclude": {
+					"**/node_modules": true,
+					"**/bower_components": true,
+					"**/*.code-search": true,
+					"**/*templ.go": true
+				}
+			},
+			"extensions": [
+				"golang.go",
+				"usernamehw.errorlens",
+				"ms-vscode.makefile-tools"
+			]
+        }
+    }
+
+	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
+	// "remoteUser": "root"
+}
