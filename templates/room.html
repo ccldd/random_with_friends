@@ -1,0 +1,29 @@
+{{ template "layout.html" . }}
+
+{{ define "content" }}
+<p>
+    You are in room {{ .RoomId }}
+</p>
+
+<script>
+    const path = window.location.pathname;
+    const roomId = path.replace('/room/', '');
+    const socket = new WebSocket(`ws://${window.location.host}/ws/${roomId}`);
+
+    socket.onopen = function (event) {
+        console.log('WebSocket is connected.');
+    };
+
+    socket.onmessage = function (event) {
+        console.log('Received message:', event.data);
+    };
+
+    socket.onclose = function (event) {
+        console.log('WebSocket is closed.');
+    };
+
+    socket.onerror = function (error) {
+        console.error('WebSocket error:', error);
+    };
+</script>
+{{ end }}
