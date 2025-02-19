@@ -1,20 +1,24 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
-
-	"github.com/gorilla/websocket"
+	"sync/atomic"
 )
 
 type RoomId = string
 
 type Room struct {
 	ID   string
-	host *websocket.Conn
+	host *Client
+	isRunning atomic.Bool
 
 	rw      sync.RWMutex
-	members []*websocket.Conn
+	members []*Client
+
+	onRoomClose func()
 }
 
 func NewRoom() *Room {
@@ -30,7 +34,7 @@ func (r *Room) HasHost() bool {
 	return r.host != nil
 }
 
-func (r *Room) SetHost(conn *websocket.Conn) {
+func (r *Room) SetHost(client *Client) {
 	r.rw.Lock()
 	defer r.rw.Unlock()
 
@@ -40,11 +44,51 @@ func (r *Room) SetHost(conn *websocket.Conn) {
 	if len(r.members) > 0 {
 		panic(fmt.Sprintf("room %s has no host but has members already", r.ID))
 	}
-	r.host = conn
+	r.host = client
 }
 
-func (r *Room) Join(conn *websocket.Conn) {
+func (r *Room) Join(client *Client) {
 	r.rw.Lock()
 	defer r.rw.Unlock()
-	r.members = append(r.members, conn)
+	r.members = append(r.members, client)
+}
+
+func (r *Room) SetOnRoomClose(fn func()) {
+	r.onRoomClose = fn
+}
+
+func (r *Room) Run() {
+	if r.isRunning.Load() {
+		panic(fmt.Sprintf("room %s is already running", r.ID))
+	}
+
+	r.waitHostStart()
+}
+
+func (r *Room) Close() {
+	r.rw.Lock()
+	defer r.rw.Unlock()
+
+	r.host.Close()
+
+	for _, client := range r.members {
+		client.ws.WriteJSON(NewWSMessageError(errors.New("host disconnected")))
+		client.Close()
+	}
+
+	if r.onRoomClose != nil {
+		r.onRoomClose()
+	}
+}
+
+func (r *Room) waitHostStart() {
+	logger := slog.With("roomId", r.ID)
+	logger.Info("waiting for host to start random generation")
+	for {
+		msg := <-r.host.read
+		if _, ok := msg.(WSMessageStart); ok {
+			logger.Info("host has started random generation")
+			break
+		}
+	}
 }

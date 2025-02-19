@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -39,14 +38,26 @@ func (a *App) render(w http.ResponseWriter, name string, data any) {
 	}
 }
 
+func (a *App) doesRoomExists(roomId RoomId) bool {
+	a.rw.RLock()
+	defer a.rw.RUnlock()
+	_, ok := a.rooms[roomId]
+	return ok
+}
+
 func (a *App) Index(w http.ResponseWriter, r *http.Request) {
 	a.render(w, "index.html", nil)
 }
 
-func (a *App) GetRoom(w http.ResponseWriter, r *http.Request) {
-	roomId := r.PathValue("roomId")
+func (a *App) JoinRoom(w http.ResponseWriter, r *http.Request) {
+	// If roomId in path, then it must be from a link
+	roomId := r.URL.Query().Get("roomId")
 	if roomId == "" {
 		http.Error(w, "missing room ID", http.StatusBadRequest)
+		return
+	}
+	if !a.doesRoomExists(roomId) {
+		http.Error(w, "room not found", http.StatusNotFound)
 		return
 	}
 
@@ -62,7 +73,7 @@ func (a *App) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	a.rw.Unlock()
 	slog.Info("room created", "roomId", room.ID)
 
-	http.Redirect(w, r, fmt.Sprintf("/room/%s", room.ID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/room/join?roomId=%s", room.ID), http.StatusSeeOther)
 }
 
 func (a *App) PostRoom(w http.ResponseWriter, r *http.Request) {
@@ -103,55 +114,35 @@ func (a *App) Websocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	client := NewClient(ws)
+	client.Run()
+
 	// If first in the room, then it is the host
 	if !room.HasHost() {
-		a.handleHostConnect(room, ws)
+		a.handleHostConnect(room, client)
+		room.SetOnRoomClose(func() { a.handleHostDisconnect(room) })
 	} else {
-		a.handleMemberConnect(room, ws)
+		a.handleMemberConnect(room, client)
 	}
 }
 
-func (a *App) handleHostConnect(room *Room, ws *websocket.Conn) {
-	room.SetHost(ws)
-	ws.SetCloseHandler(func(code int, text string) error {
-		return a.handleHostDisconnect(code, text, room)
-	})
+func (a *App) handleHostConnect(room *Room, client *Client) {
+	room.SetHost(client)
+	slog.Info("host connected", "roomId", room.ID)
+	go room.Run()
 }
 
-func (a *App) handleHostDisconnect(code int, text string, room *Room) error {
+func (a *App) handleHostDisconnect(room *Room) {
 	slog.Info("host disconnected", "roomId", room.ID, "membersCount", len(room.members))
 
 	// Remove the room
 	a.rw.Lock()
+	room.Close()
 	delete(a.rooms, room.ID)
 	a.rw.Unlock()
-
-	// Let all members know that the room has been closed
-	errs := make([]error, 0)
-	room.rw.RLock()
-	defer room.rw.RUnlock()
-	for _, conn := range room.members {
-		if err := conn.WriteJSON(NewWSMessageError(errors.New("host disconnected"))); err != nil {
-			errs = append(errs, err)
-		}
-		if err := conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(code, text)); err != nil {
-			errs = append(errs, err)
-		}
-		if err := conn.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	return errors.Join(errs...)
 }
 
-func (a *App) handleMemberConnect(room *Room, ws *websocket.Conn) {
-	room.Join(ws)
-	ws.SetCloseHandler(func(code int, text string) error {
-		return a.handleMemberDisconnect(code, text, room, ws)
-	})
-}
-
-func (a *App) handleMemberDisconnect(code int, text string, room *Room, ws *websocket.Conn) error {
-	panic("unimplemented")
+func (a *App) handleMemberConnect(room *Room, client *Client) {
+	room.Join(client)
+	slog.Info("member connected", "roomId", room.ID, "membersCount", len(room.members))
 }

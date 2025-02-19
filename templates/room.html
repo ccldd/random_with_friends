@@ -6,8 +6,9 @@
 </p>
 
 <script>
-    const path = window.location.pathname;
-    const roomId = path.replace('/room/', '');
+    const url = new URL(window.location.href);
+    const queryParams = url.searchParams;
+    const roomId = queryParams.get('roomId');
     const socket = new WebSocket(`ws://${window.location.host}/ws/${roomId}`);
 
     socket.onopen = function (event) {
