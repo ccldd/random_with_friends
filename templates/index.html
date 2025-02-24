@@ -1,12 +1,26 @@
 {{ template "layout.html" . }}
 
 {{ define "content" }}
-<form action="/create" method="post">
-    <button>Create Room</button>
+<input name="name" type="text" placeholder="your name" required minlength="1" />
+
+<form>
+    <button onclick="onClick('/create', 'post')">Create Room</button>
 </form>
 
-<form action="/room/join" method="get" required>
-    <input name="roomId" type="text" placeholder="room id"/>
-    <button>Join Room</button>
+<form>
+    <input name="roomId" type="text" placeholder="room id" pattern="[A-Za-z]+"
+        oninput="this.value = this.value.toUpperCase()" />
+    <button onclick="onClick('/room/join', 'get')">Join Room</button>
 </form>
+<script>
+    async function onClick(action, method) {
+        const name = document.querySelector('input[name="name"]').value;
+        const roomId = document.querySelector('input[name="roomId"]').value;
+        const params = new URLSearchParams({ name, roomId });
+        const url = `${action}?${params.toString()}`;
+        console.table(url);
+        const resp = await fetch(url, { method })
+        window.location.href = resp.url;
+    }
+</script>
 {{ end }}

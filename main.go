@@ -18,7 +18,19 @@ func main() {
 	slog.SetDefault(slog.New(slogHandler))
 
 	// Routes
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.DefaultServeMux = routes(app)
+
+	// Server
+	slog.Info("Server started at :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		panic(err)
+	}
+}
+
+func routes(app *App) *http.ServeMux {
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" && r.Method == "GET" {
 			app.Index(w, r)
 			return
@@ -26,13 +38,8 @@ func main() {
 
 		http.NotFound(w, r)
 	})
-	http.HandleFunc("POST /create", app.CreateRoom)
-	http.HandleFunc("GET /room/join", app.JoinRoom) // this is via a link
-	http.HandleFunc("GET /ws/{roomId}", app.Websocket)
-
-	// Server
-	slog.Info("Server started at :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		panic(err)
-	}
+	mux.HandleFunc("POST /create", app.CreateRoom)
+	mux.HandleFunc("GET /room/join", app.JoinRoom) // this is via a link
+	mux.HandleFunc("GET /ws/{roomId}", app.Websocket)
+	return mux
 }

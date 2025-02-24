@@ -50,6 +50,12 @@ func (r *Room) SetHost(client *Client) {
 func (r *Room) Join(client *Client) {
 	r.rw.Lock()
 	defer r.rw.Unlock()
+
+	r.host.outgoing <- NewWSMessageJoin(client.name)
+	for _, member := range r.members {
+		member.outgoing <- NewWSMessageJoin(client.name)
+	}
+
 	r.members = append(r.members, client)
 }
 
@@ -84,8 +90,7 @@ func (r *Room) Close() {
 func (r *Room) waitHostStart() {
 	logger := slog.With("roomId", r.ID)
 	logger.Info("waiting for host to start random generation")
-	for {
-		msg := <-r.host.read
+	for msg := range r.host.incoming {
 		if _, ok := msg.(WSMessageStart); ok {
 			logger.Info("host has started random generation")
 			break

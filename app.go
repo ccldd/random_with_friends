@@ -50,30 +50,50 @@ func (a *App) Index(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) JoinRoom(w http.ResponseWriter, r *http.Request) {
-	// If roomId in path, then it must be from a link
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		http.Error(w, "missing name", http.StatusBadRequest)
+		return
+	}
+
 	roomId := r.URL.Query().Get("roomId")
 	if roomId == "" {
 		http.Error(w, "missing room ID", http.StatusBadRequest)
 		return
 	}
-	if !a.doesRoomExists(roomId) {
+	a.rw.RLock()
+	defer a.rw.RUnlock()
+	room, ok := a.rooms[roomId]
+	if !ok {
 		http.Error(w, "room not found", http.StatusNotFound)
 		return
 	}
 
 	data := make(map[string]any)
 	data["RoomId"] = roomId
+	data["Name"] = name
+	if room.HasHost() {
+		data["ClientType"] = "member"
+	} else {
+		data["ClientType"] = "host"
+	}
 	a.render(w, "room.html", data)
 }
 
 func (a *App) CreateRoom(w http.ResponseWriter, r *http.Request) {
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		http.Error(w, "missing name", http.StatusBadRequest)
+		return
+	}
+
 	a.rw.Lock()
 	room := NewRoom()
 	a.rooms[room.ID] = room
 	a.rw.Unlock()
-	slog.Info("room created", "roomId", room.ID)
+	slog.Info("room created", "roomId", room.ID, "name", name)
 
-	http.Redirect(w, r, fmt.Sprintf("/room/join?roomId=%s", room.ID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/room/join?name=%s&roomId=%s", name, room.ID), http.StatusSeeOther)
 }
 
 func (a *App) PostRoom(w http.ResponseWriter, r *http.Request) {
@@ -89,8 +109,9 @@ func (a *App) PostRoom(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) Websocket(w http.ResponseWriter, r *http.Request) {
 	roomId := r.PathValue("roomId")
-	if roomId == "" {
-		http.Error(w, "missing room ID", http.StatusBadRequest)
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		http.Error(w, "missing name", http.StatusBadRequest)
 		return
 	}
 
@@ -114,7 +135,7 @@ func (a *App) Websocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := NewClient(ws)
+	client := NewClient(name, ws)
 	client.Run()
 
 	// If first in the room, then it is the host
@@ -128,7 +149,7 @@ func (a *App) Websocket(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleHostConnect(room *Room, client *Client) {
 	room.SetHost(client)
-	slog.Info("host connected", "roomId", room.ID)
+	slog.Info("host connected", "roomId", room.ID, "client", client.id)
 	go room.Run()
 }
 
@@ -144,5 +165,5 @@ func (a *App) handleHostDisconnect(room *Room) {
 
 func (a *App) handleMemberConnect(room *Room, client *Client) {
 	room.Join(client)
-	slog.Info("member connected", "roomId", room.ID, "membersCount", len(room.members))
+	slog.Info("member connected", "roomId", room.ID, "membersCount", len(room.members), "client", client.id)
 }

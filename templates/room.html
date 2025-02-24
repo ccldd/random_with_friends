@@ -1,15 +1,24 @@
 {{ template "layout.html" . }}
 
 {{ define "content" }}
+{{ $is_host := eq .ClientType "host" }}
 <p>
     You are in room {{ .RoomId }}
+    You are {{ .ClientType }}, id = {{ .ClientId }}
 </p>
+<ul id="people">
+    <li>{{ .Name }}</li>
+</ul>
+{{ if $is_host }}
+<button onclick="start()">Start Game</button>
+{{ end }}
 
 <script>
     const url = new URL(window.location.href);
     const queryParams = url.searchParams;
     const roomId = queryParams.get('roomId');
-    const socket = new WebSocket(`ws://${window.location.host}/ws/${roomId}`);
+    const name = queryParams.get('name');
+    const socket = new WebSocket(`ws://${window.location.host}/ws/${roomId}?name=${name}`);
 
     socket.onopen = function (event) {
         console.log('WebSocket is connected.');
@@ -17,6 +26,18 @@
 
     socket.onmessage = function (event) {
         console.log('Received message:', event.data);
+
+        const json = JSON.parse(event.data);
+        switch (json.type) {
+            case 'start':
+                console.log('Game started');
+                break;
+            case 'join':
+                onJoin(json);
+                break;
+            default:
+                console.error('Unknown message:', event.data);
+        }
     };
 
     socket.onclose = function (event) {
@@ -26,5 +47,17 @@
     socket.onerror = function (error) {
         console.error('WebSocket error:', error);
     };
+
+    function start() {
+        socket.send(JSON.stringify({ type: 'start' }));
+    }
+
+    function onJoin(json) {
+        console.log(`"${json.name}" joined`);
+        const ul = document.querySelector('#people');
+        const li = document.createElement('li');
+        li.textContent = json.name;
+        ul.appendChild(li)
+    }
 </script>
 {{ end }}
