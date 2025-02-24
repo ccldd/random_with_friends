@@ -93,7 +93,7 @@ func (a *App) CreateRoom(w http.ResponseWriter, r *http.Request) {
 	a.rw.Unlock()
 	slog.Info("room created", "roomId", room.ID, "name", name)
 
-	http.Redirect(w, r, fmt.Sprintf("/room/join?name=%s&roomId=%s", name, room.ID), http.StatusSeeOther)
+	http.Redirect(w, r, fmt.Sprintf("/room/join?name=%s&roomId=%s", name, room.ID), http.StatusFound)
 }
 
 func (a *App) PostRoom(w http.ResponseWriter, r *http.Request) {

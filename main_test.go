@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/suite"
@@ -58,6 +59,46 @@ func (suite *ServerTestSuite) TestCreateRoomOk() {
 	suite.NoError(err)
 	suite.NotNil(resp)
 	suite.Equal(http.StatusOK, resp.StatusCode)
+	suite.Len(suite.App.rooms, 1, "should have created a room")
+
+	loc, err := resp.Request.Response.Location()
+	suite.Require().NoError(err)
+	suite.Require().NotEmpty(loc)
+
+	roomId := loc.Query().Get("roomId")
+	suite.Contains(suite.App.rooms, roomId)
+
+	// hosts connect via websockets
+	suite.mustConnectWSNo(roomId, "foo")
+	suite.NotNil(suite.App.rooms[roomId].host, "should have a host")
+}
+
+func (suite *ServerTestSuite) TestJoinRoomNoName() {
+	resp, err := suite.Server.Client().Get(suite.Server.URL + "/room/join")
+	suite.NoError(err)
+	suite.NotNil(resp)
+	suite.Equal(http.StatusBadRequest, resp.StatusCode)
+}
+
+func (suite *ServerTestSuite) TestJoinNonExistentRoom() {
+	resp, err := suite.Server.Client().Get(suite.Server.URL + "/room/join?name=foo&roomId=123")
+	suite.NoError(err)
+	suite.NotNil(resp)
+	suite.Equal(http.StatusNotFound, resp.StatusCode)
+}
+
+func (suite *ServerTestSuite) TestJoinRoomOk() {
+	// create the room
+	resp, _ := suite.Server.Client().Post(suite.Server.URL+"/create?name=foo", "application/json", nil)
+	loc, _ := resp.Request.Response.Location()
+	roomId := loc.Query().Get("roomId")
+	suite.mustConnectWSNo(roomId, "foo")
+
+	// join via websockets
+	suite.mustConnectWSNo(roomId, "bar")
+	suite.Eventually(func() bool { 
+		return suite.Len(suite.App.rooms[roomId].members, 1, "should have joined the room")
+	}, 1 * time.Second, 100 * time.Millisecond)
 }
 
 func (suite *ServerTestSuite) TestWSNoRoomId() {
